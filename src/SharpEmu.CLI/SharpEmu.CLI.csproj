@@ -95,6 +95,16 @@ SPDX-License-Identifier: GPL-2.0-or-later
     </ItemGroup>
   </Target>
 
+  <!-- These are native debug symbols emitted by Skia/HarfBuzz, not managed
+       symbols that single-file publish can bundle. They are not needed at
+       runtime and would otherwise add more than 100 MB to every release. -->
+  <Target Name="RemoveNativeDebugSymbols" AfterTargets="Publish">
+    <ItemGroup>
+      <_NativeDebugSymbols Include="$(PublishDir)**\*.pdb" />
+    </ItemGroup>
+    <Delete Files="@(_NativeDebugSymbols)" />
+  </Target>
+
   <!-- Native FFmpeg libraries publish into a subfolder next to the
        executable instead of sitting loose beside it, so the publish
        directory stays uncluttered as more native deps get added. The folder
