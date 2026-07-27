@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: MIT
 #nullable disable
 namespace LibAtrac9.Utilities
 {
