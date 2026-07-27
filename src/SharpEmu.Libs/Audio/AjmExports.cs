@@ -932,6 +932,10 @@ public static class AjmExports
         }
 
         Span<byte> descriptor = stackalloc byte[AjmBufferDescriptorBytes];
+        // Hoisted out of the loop: a stackalloc per iteration accumulates across
+        // up to MaxBufferDescriptors passes and never unwinds until the method
+        // returns.
+        Span<byte> head = stackalloc byte[16];
         for (var index = 0UL; index < countOrSize; index++)
         {
             if (!ctx.Memory.TryRead(address + (index * AjmBufferDescriptorBytes), descriptor))
@@ -941,7 +945,6 @@ public static class AjmExports
 
             var bufferAddress = BinaryPrimitives.ReadUInt64LittleEndian(descriptor);
             var bufferSize = BinaryPrimitives.ReadUInt64LittleEndian(descriptor[8..]);
-            Span<byte> head = stackalloc byte[16];
             var readable = bufferAddress != 0 && bufferSize != 0 && ctx.Memory.TryRead(bufferAddress, head);
             Trace(
                 $"buffer[{label}][{index}] address=0x{bufferAddress:X16} size=0x{bufferSize:X} " +
