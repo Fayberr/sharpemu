@@ -241,6 +241,8 @@ public partial class MainWindow : Window
             SetEnvironmentToggle("SHARPEMU_LOG_IO", EnvLogIoToggle.IsChecked == true);
         EnvLogNpToggle.IsCheckedChanged += (_, _) =>
             SetEnvironmentToggle("SHARPEMU_LOG_NP", EnvLogNpToggle.IsChecked == true);
+        EnvGuestImageCpuSyncToggle.IsCheckedChanged += (_, _) =>
+            SetGuestImageCpuSync(EnvGuestImageCpuSyncToggle.IsChecked == true);
         LanguageBox.SelectionChanged += (_, _) => OnLanguageChanged();
 
         GameList.AddHandler(ContextRequestedEvent, OnGameContextRequested, RoutingStrategies.Tunnel);
@@ -851,6 +853,10 @@ public partial class MainWindow : Window
         EnvLogDirectMemoryToggle.IsChecked = _settings.EnvironmentToggles.Contains("SHARPEMU_LOG_DIRECT_MEMORY");
         EnvLogIoToggle.IsChecked = _settings.EnvironmentToggles.Contains("SHARPEMU_LOG_IO");
         EnvLogNpToggle.IsChecked = _settings.EnvironmentToggles.Contains("SHARPEMU_LOG_NP");
+        EnvGuestImageCpuSyncToggle.IsChecked = IsEnvironmentEnabled(
+            _settings.EnvironmentToggles,
+            "SHARPEMU_GUEST_IMAGE_CPU_SYNC",
+            defaultValue: true);
         WindowModeBox.SelectedIndex = ChoiceIndex(_settings.WindowMode, "Windowed", "Borderless", "Exclusive");
         LoadHostDisplayOptions();
         ScalingModeBox.SelectedIndex = ChoiceIndex(_settings.ScalingMode, "Fit", "Cover", "Stretch", "Integer");
@@ -1075,6 +1081,40 @@ public partial class MainWindow : Window
         {
             _settings.EnvironmentToggles.Remove(name);
         }
+    }
+
+    private void SetGuestImageCpuSync(bool enabled)
+    {
+        const string name = "SHARPEMU_GUEST_IMAGE_CPU_SYNC";
+        _settings.EnvironmentToggles.RemoveAll(entry =>
+            string.Equals(entry, name, StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(entry, name + "=0", StringComparison.OrdinalIgnoreCase));
+        if (!enabled)
+        {
+            _settings.EnvironmentToggles.Add(name + "=0");
+        }
+    }
+
+    private static bool IsEnvironmentEnabled(
+        IEnumerable<string> entries,
+        string name,
+        bool defaultValue)
+    {
+        foreach (var entry in entries)
+        {
+            if (string.Equals(entry, name + "=0", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            if (string.Equals(entry, name, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(entry, name + "=1", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return defaultValue;
     }
 
     private string SelectedLogLevel()
@@ -1873,16 +1913,23 @@ public partial class MainWindow : Window
         // launcher process so every platform receives the same launch options.
         foreach (var staleName in _appliedEnvironmentVariables)
         {
-            if (!effective.EnvironmentToggles.Contains(staleName))
+            if (!effective.EnvironmentToggles.Any(entry =>
+                    TryParseEnvironmentEntry(entry, out var name, out _) &&
+                    string.Equals(name, staleName, StringComparison.OrdinalIgnoreCase)))
             {
                 Environment.SetEnvironmentVariable(staleName, null);
             }
         }
 
         _appliedEnvironmentVariables.Clear();
-        foreach (var name in effective.EnvironmentToggles)
+        foreach (var entry in effective.EnvironmentToggles)
         {
-            Environment.SetEnvironmentVariable(name, "1");
+            if (!TryParseEnvironmentEntry(entry, out var name, out var value))
+            {
+                continue;
+            }
+
+            Environment.SetEnvironmentVariable(name, value);
             _appliedEnvironmentVariables.Add(name);
         }
 
@@ -1923,6 +1970,16 @@ public partial class MainWindow : Window
             runtimeOptions);
 
         StartPendingSession();
+    }
+
+    private static bool TryParseEnvironmentEntry(string entry, out string name, out string value)
+    {
+        var separator = entry.IndexOf('=');
+        name = separator >= 0 ? entry[..separator] : entry;
+        value = separator >= 0 ? entry[(separator + 1)..] : "1";
+        return name.StartsWith("SHARPEMU_", StringComparison.OrdinalIgnoreCase) &&
+               name.Length > "SHARPEMU_".Length &&
+               value.Length != 0;
     }
 
     /// <summary>

@@ -27,6 +27,7 @@ public sealed class PerGameSettingsDialog : Window
         "SHARPEMU_LOG_DIRECT_MEMORY",
         "SHARPEMU_LOG_IO",
         "SHARPEMU_LOG_NP",
+        "SHARPEMU_GUEST_IMAGE_CPU_SYNC",
     };
 
     private readonly string _titleId;
@@ -240,7 +241,7 @@ public sealed class PerGameSettingsDialog : Window
         _hdrMode.SelectedItem = ChoiceOrDefault(HdrModes, global.HdrMode, "Auto");
         foreach (var (name, box) in _envBoxes)
         {
-            box.IsChecked = global.EnvironmentToggles.Contains(name);
+            box.IsChecked = IsEnvironmentEnabled(global.EnvironmentToggles, name, defaultValue: name == "SHARPEMU_GUEST_IMAGE_CPU_SYNC");
         }
 
         if (existing is null)
@@ -294,7 +295,7 @@ public sealed class PerGameSettingsDialog : Window
             _envRow.IsOverridden = true;
             foreach (var (name, box) in _envBoxes)
             {
-                box.IsChecked = env.Contains(name);
+                box.IsChecked = IsEnvironmentEnabled(env, name, defaultValue: name == "SHARPEMU_GUEST_IMAGE_CPU_SYNC");
             }
         }
     }
@@ -388,10 +389,45 @@ public sealed class PerGameSettingsDialog : Window
             ScalingMode = _scalingModeRow.IsOverridden ? _scalingMode.SelectedItem as string : null,
             VSync = _vsyncRow.IsOverridden ? _vsync.IsChecked == true : null,
             HdrMode = _hdrModeRow.IsOverridden ? _hdrMode.SelectedItem as string : null,
-            EnvironmentToggles = _envRow.IsOverridden
-                ? _envBoxes.Where(e => e.Box.IsChecked == true).Select(e => e.Name).ToList()
-                : null,
+            EnvironmentToggles = _envRow.IsOverridden ? BuildEnvironmentEntries() : null,
         };
         settings.Save(_titleId);
+    }
+
+    private List<string> BuildEnvironmentEntries()
+    {
+        const string guestImageCpuSync = "SHARPEMU_GUEST_IMAGE_CPU_SYNC";
+        var entries = _envBoxes
+            .Where(entry => entry.Name != guestImageCpuSync && entry.Box.IsChecked == true)
+            .Select(entry => entry.Name)
+            .ToList();
+        if (_envBoxes.First(entry => entry.Name == guestImageCpuSync).Box.IsChecked != true)
+        {
+            entries.Add(guestImageCpuSync + "=0");
+        }
+
+        return entries;
+    }
+
+    private static bool IsEnvironmentEnabled(
+        IEnumerable<string> entries,
+        string name,
+        bool defaultValue)
+    {
+        foreach (var entry in entries)
+        {
+            if (string.Equals(entry, name + "=0", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            if (string.Equals(entry, name, StringComparison.OrdinalIgnoreCase) ||
+                string.Equals(entry, name + "=1", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return defaultValue;
     }
 }
