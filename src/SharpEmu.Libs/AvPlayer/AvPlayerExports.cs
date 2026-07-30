@@ -22,8 +22,8 @@ public static class AvPlayerExports
     private const int FrameHeightAlignment = 16;
     private const int FrameInfoSize = 40;
     private const int FrameInfoExSize = 104;
-    // This structure is 32 bytes. A larger write can damage the guest stack.
-    private const int StreamInfoSize = 32;
+    // type(4) + reserved(4) + details(16) + duration(8) + startTime(8).
+    private const int StreamInfoSize = 40;
     private const int StreamInfoExSize = 32;
     private const int MaxGuestPathLength = 4096;
     private static readonly object StateGate = new();
