@@ -8,6 +8,7 @@ using SharpEmu.Core.Cpu.Native;
 using SharpEmu.Core.Loader;
 using SharpEmu.Core.Memory;
 using SharpEmu.HLE;
+using SharpEmu.Libs.Kernel;
 
 namespace SharpEmu.Core.Cpu;
 
@@ -471,6 +472,11 @@ public sealed class CpuDispatcher : ICpuDispatcher, IDisposable
         {
             return false;
         }
+
+        // Null-terminate trailing slot for safe guest argv iteration
+        _ = context.TryWriteUInt64(entryParamsAddress + 0x20, 0);
+
+        KernelExports.ConfigureProcessArguments(arguments.Count, entryParamsAddress + 0x08);
 
         if (arguments.Count > 1)
         {
