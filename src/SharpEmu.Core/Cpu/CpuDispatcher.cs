@@ -473,9 +473,6 @@ public sealed class CpuDispatcher : ICpuDispatcher, IDisposable
             return false;
         }
 
-        // Null-terminate trailing slot for safe guest argv iteration
-        _ = context.TryWriteUInt64(entryParamsAddress + 0x20, 0);
-
         KernelExports.ConfigureProcessArguments(arguments.Count, entryParamsAddress + 0x08);
 
         if (arguments.Count > 1)
