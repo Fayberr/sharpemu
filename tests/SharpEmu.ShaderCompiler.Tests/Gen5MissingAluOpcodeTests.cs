@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 
 using System.Buffers.Binary;
+using System.Text;
 using SharpEmu.HLE;
 using SharpEmu.ShaderCompiler;
 using SharpEmu.ShaderCompiler.Vulkan;
@@ -42,6 +43,10 @@ public sealed class Gen5MissingAluOpcodeTests
         var opcodes = ReadOpcodes(shader.Spirv);
         // SAbsdiffI32 should emit signed subtraction (ISub) and SAbs
         Assert.Contains((ushort)SpirvOp.ISub, opcodes);
+        // SAbs is GLSL.std.450 extended opcode 5 (4 would be float-only FAbs)
+        Assert.Contains(
+            (5u, "GLSL.std.450"),
+            ReadExtendedInstructions(shader.Spirv, "GLSL.std.450"));
     }
 
     [Fact]
@@ -130,6 +135,45 @@ public sealed class Gen5MissingAluOpcodeTests
                 out var error),
             error);
         return program;
+    }
+
+    private static IReadOnlyList<(uint Opcode, string Import)> ReadExtendedInstructions(
+        byte[] spirv,
+        string importName)
+    {
+        var words = new uint[spirv.Length / sizeof(uint)];
+        Buffer.BlockCopy(spirv, 0, words, 0, spirv.Length);
+
+        var imports = new Dictionary<uint, string>();
+        var extended = new List<(uint, string)>();
+        for (var offset = 5; offset < words.Length;)
+        {
+            var word = words[offset];
+            var wordCount = (int)(word >> 16);
+            if (wordCount <= 0 || offset + wordCount > words.Length)
+            {
+                break;
+            }
+
+            var opcode = (ushort)word;
+            if (opcode == (ushort)SpirvOp.ExtInstImport)
+            {
+                var nameWords = words.AsSpan(offset + 2, wordCount - 2);
+                var nameBytes = new byte[nameWords.Length * sizeof(uint)];
+                Buffer.BlockCopy(nameWords.ToArray(), 0, nameBytes, 0, nameBytes.Length);
+                var name = Encoding.UTF8.GetString(nameBytes).TrimEnd('\0');
+                imports[words[offset + 1]] = name;
+            }
+            else if (opcode == (ushort)SpirvOp.ExtInst)
+            {
+                var importId = words[offset + 3];
+                extended.Add((words[offset + 4], imports.GetValueOrDefault(importId, string.Empty)));
+            }
+
+            offset += wordCount;
+        }
+
+        return extended.Where(e => e.Item2 == importName).ToList();
     }
 
     private static IReadOnlyList<ushort> ReadOpcodes(byte[] spirv)
